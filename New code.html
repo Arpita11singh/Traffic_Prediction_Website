@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Prediction App - India Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Include Papa Parse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Include SheetJS (XLSX) for Excel parsing -->
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the active navigation link */
+        .nav-link.active {
+            background-color: #4a5568; /* a darker gray */
+            color: #ffffff;
+        }
+        /* Simple transition for page switching */
+        .page-content, .auth-page, .prediction-tab-content {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        .page-content.active, .auth-page.active, .prediction-tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Chatbot styles */
+        #chat-widget {
+            transition: all 0.3s ease-in-out;
+        }
+        #chat-window {
+            transition: all 0.3s ease-in-out;
+            max-height: 70vh;
+        }
+        .tab-button.active {
+            color: #4f46e5;
+            border-color: #4f46e5;
+        }
+        /* Custom styling from user */
+        img {
+            width: 500px;
+            height: 200px;
+            margin-right: 50%;
+            margin-left: 20%;
+        }
+        .author-section {
+            max-width: 900px;
+            margin: 60px auto;
+            background-color: #ffffff;
+            padding: 40px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .author-photo img {
+            width: 200px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 4px solid #007acc;
+            margin-right: 90px;
+        }
+        .author-content {
+            flex: 1;
+        }
+        .author-content h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #007acc;
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+        .author-content p {
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #444;
+            margin-bottom: 15px;
+        }
+        .name {
+            color: #007acc;
+            font-weight: bold;
+        }
+        @media (max-width: 700px) {
+            .author-section {
+                flex-direction: column;
+                text-align: center;
+            }
+            .author-photo img {
+                width: 160px;
+                height: 160px;
+            }
+            .author-content h1 {
+                font-size: 1.8em;
+            }
+        }
+        .copyright-badge {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="app-view">
+        <div class="flex h-screen">
+            <aside class="w-64 bg-gray-800 text-white flex flex-col">
+                <div class="h-20 flex items-center justify-center bg-gray-900">
+                    <h1 class="text-xl font-bold text-center">TRAFFIC<br>PREDICTION</h1>
+                </div>
+                <nav class="flex-1 px-4 py-6">
+                    <a href="#welcome" class="nav-link active flex items-center py-3 px-4 rounded-lg transition-colors duration-200 hover:bg-gray-700">Welcome</a>
+                    <a href="#routes" class="nav-link flex items-center py-3 px-4 mt-2 rounded-lg transition-colors duration-200 hover:bg-gray-700">My Routes</a>
+                    <a href="#prediction" class="nav-link flex items-center py-3 px-4 mt-2 rounded-lg transition-colors duration-200 hover:bg-gray-700">Prediction</a>
+                    <a href="#dashboard" class="nav-link flex items-center py-3 px-4 mt-2 rounded-lg transition-colors duration-200 hover:bg-gray-700">Dashboard</a>
+                    <a href="#about" class="nav-link flex items-center py-3 px-4 mt-2 rounded-lg transition-colors duration-200 hover:bg-gray-700">About</a>
+                </nav>
+                <div class="p-4 border-t border-gray-700">
+                    <button id="login-signup-button" class="hidden w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Login / Sign Up</button>
+                    <button id="logout-button" class="hidden w-full bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-700 transition-colors">Logout</button>
+                </div>
+            </aside>
+
+            <main class="flex-1 p-6 sm:p-10 overflow-y-auto">
+                <section id="welcome" class="page-content active">
+                    <div id="live-clock" class="text-5xl md:text-6xl font-bold text-gray-800 tracking-wider"></div>
+                    <p id="live-date" class="text-md md:text-lg text-gray-500 mb-6"></p>
+                    <img src="Screenshot 2025-08-04 212241.png" alt="Image">
+                    <div class="flex flex-col items-center justify-center h-full text-center px-4">
+                        <h2 id="welcome-greeting" class="text-3xl md:text-4xl font-semibold text-gray-700 mb-8"></h2>
+                        <a href="#prediction" id="plan-commute-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-full hover:bg-indigo-700 transition-transform transform hover:scale-105 text-lg shadow-lg">Plan Your Commute Now</a>
+                        <div class="mt-12 md:mt-16 flex space-x-8 md:space-x-12 text-gray-600">
+                            <div class="text-center">
+                                <p class="text-2xl font-bold text-indigo-500" id="stat-users">1,234</p>
+                                <p class="text-sm font-medium">Active Users</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-2xl font-bold text-indigo-500" id="stat-predictions">5,678</p>
+                                <p class="text-sm font-medium">Predictions Today</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+
+                <section id="routes" class="page-content">
+                    <div class="max-w-4xl mx-auto">
+                        <div id="routes-guest-prompt" class="hidden text-center bg-yellow-100 text-yellow-800 p-4 rounded-md mb-6">
+                            <p>Please <button id="login-from-routes" class="font-bold underline">login or sign up</button> to save routes and set commute alerts.</p>
+                        </div>
+                        <h2 class="text-3xl font-bold text-gray-800 mb-6">My Routes & Commute</h2>
+                        <div class="bg-white p-6 rounded-xl shadow-md mb-8">
+                            <h3 class="text-xl font-semibold text-gray-700 mb-4">Save a New Route</h3>
+                            <form id="save-route-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div><label for="route-name" class="block text-sm font-medium text-gray-700">Route Name</label><input type="text" id="route-name" placeholder="e.g., Home to Office" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                <div><label for="route-city" class="block text-sm font-medium text-gray-700">City</label><select id="route-city" class="location-select mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select></div>
+                                <div><button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700">Save Route</button></div>
+                            </form>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md mb-8">
+                            <h3 class="text-xl font-semibold text-gray-700 mb-4">Your Saved Routes</h3>
+                            <div id="saved-routes-list" class="space-y-3"><p class="text-gray-500">You haven't saved any routes yet.</p></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-md">
+                            <h3 class="text-xl font-semibold text-gray-700 mb-4">Daily Commute Alert</h3>
+                            <form id="commute-alert-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div><label for="commute-route" class="block text-sm font-medium text-gray-700">Commute Route</label><select id="commute-route" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select></div>
+                                <div><label for="commute-time" class="block text-sm font-medium text-gray-700">Alert Time</label><input type="time" id="commute-time" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                <div><button type="submit" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Set Alert</button></div>
+                            </form>
+                            <p id="commute-alert-status" class="text-sm text-green-600 mt-3"></p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="prediction" class="page-content">
+                    <div class="bg-white p-8 rounded-xl shadow-md max-w-lg mx-auto">
+                        <div class="mb-6 border-b border-gray-200">
+                            <nav class="flex -mb-px" id="prediction-tabs">
+                                <button data-tab="one-time" class="tab-button active w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm">One-Time Trip</button>
+                                <button data-tab="best-time" class="tab-button w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300">Best Time to Leave</button>
+                            </nav>
+                        </div>
+                        <div id="one-time-tab" class="prediction-tab-content active">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-6">Create a Traffic Forecast</h2>
+                            <form id="prediction-form">
+                                <div class="mb-4"><label for="location" class="block text-sm font-medium text-gray-700 mb-1">City</label><select id="location" name="location" class="location-select w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select></div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div><label for="date" class="block text-sm font-medium text-gray-700 mb-1">Date</label><input type="date" id="date" name="date" value="2025-07-27" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                    <div><label for="time" class="block text-sm font-medium text-gray-700 mb-1">Time</label><input type="time" id="time" name="time" value="21:10" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                </div>
+                                <div class="mb-4"><label for="weather" class="block text-sm font-medium text-gray-700 mb-1">Weather Conditions</label><select id="weather" name="weather" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"><option>I don't know</option><option>Clear Skies</option><option>Light Rain</option><option>Heavy Rain / Waterlogging</option></select></div>
+                                <div class="mb-6"><label for="event" class="block text-sm font-medium text-gray-700 mb-1">Local Event (Optional)</label><input type="text" id="event" name="event" placeholder="e.g., Diwali shopping, Cricket match" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                <button id="predict-button" type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 flex items-center justify-center"><span class="mr-2">🔮</span> Check My Commute</button>
+                            </form>
+                            <div class="mt-8 pt-4 border-t border-gray-200 text-center">
+                                <p class="text-gray-600 text-sm mb-2">Or upload your own data for analysis:</p>
+                                <label for="excel-upload" class="cursor-pointer bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-md hover:bg-gray-300 inline-block transition-colors duration-200">
+                                    📂 Upload Excel/CSV File
+                                </label>
+                                <!-- Updated accept attribute to include .csv -->
+                                <input type="file" id="excel-upload" class="hidden" accept=".xls,.xlsx,.csv">
+                                <span id="file-name" class="block text-gray-500 text-xs mt-2">No file selected</span>
+                                <p id="upload-status" class="text-sm mt-2"></p>
+                            </div>
+                        </div>
+                        <div id="best-time-tab" class="prediction-tab-content">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-6">Find the Best Time to Leave</h2>
+                            <form id="best-time-form">
+                                <div class="mb-4"><label for="best-time-city" class="block text-sm font-medium text-gray-700">City</label><select id="best-time-city" class="location-select mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></select></div>
+                                <div class="mb-6"><label for="arrive-by-time" class="block text-sm font-medium text-gray-700">Arrive By</label><input type="time" id="arrive-by-time" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div>
+                                <button type="submit" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-md hover:bg-green-700">Find Best Time</button>
+                            </form>
+                        </div>
+                        <div id="prediction-result" class="mt-8 hidden"></div>
+                    </div>
+                </section>
+                <section id="dashboard" class="page-content">
+                    <div class="bg-white p-8 rounded-xl shadow-md"><h2 class="text-2xl font-bold text-gray-800 mb-6">Historical Traffic Trends</h2><p class="text-gray-600 mb-4">Traffic Volume Over Time (Representative Data)</p><div class="h-96 mb-6"><canvas id="trafficChart"></canvas></div><button id="analyze-button" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 flex items-center justify-center"><span class="mr-2">✨</span> Analyze Trends with Gemini</button><div id="analysis-result" class="mt-6 hidden bg-gray-50 p-4 rounded-lg"><h3 class="font-bold text-gray-800 mb-2">AI Analysis:</h3><p id="analysis-text" class="text-gray-700 whitespace-pre-wrap"></p></div></div>
+                </section>
+                <section id="about" class="page-content">
+                    <div class="bg-white p-8 rounded-xl shadow-md max-w-2xl mx-auto"><h2 class="text-2xl font-bold text-gray-800 mb-6">About</h2><p class="text-gray-600 leading-relaxed">The Traffic Prediction App provides forecasts of traffic congestion using the Gemini AI model...</p></div>
+                    <div class="author-section">
+                        <div class="author-photo">
+                            <img src="ME.jpg" alt="Author Photo">
+                        </div>
+                        <div class="author-content">
+                            <h1>About the Author</h1>
+                            <p>Hello! I'm <span class="name">Arpita Singh</span>, an enthusiastic Information Technology engineering student who enjoys turning code into creativity. My focus lies in learning, building, and sharing.</p>
+                            <p>This space is a reflection of my journey—projects I’ve worked on, lessons I’ve learned, and ideas I’m exploring. I believe in continuous growth, teamwork, and meaningful impact through technology.</p>
+                            <p>Glad you’re here!</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+        <div id="chat-widget" class="fixed bottom-6 right-6 cursor-pointer z-50"><button id="chat-open-button" class="bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 transition-transform transform hover:scale-110"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.837 8.837 0 01-4.41-1.232l-2.434 1.217a.5.5 0 01-.65-.65l1.217-2.434A8.837 8.837 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM4.41 15.768l1.88-1.88A6.968 6.968 0 0010 15c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6c0 1.58.613 3.02 1.632 4.12L4.41 15.768z" clip-rule="evenodd" /></svg></button></div>
+        <div id="chat-window" class="hidden fixed bottom-24 right-6 w-96 bg-white rounded-xl shadow-2xl flex flex-col z-50"><div class="bg-indigo-600 text-white p-4 flex justify-between items-center rounded-t-xl"><h3 class="font-bold text-lg">Help Bot</h3><button id="chat-close-button" class="text-white hover:text-gray-200"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div id="chat-messages" class="flex-1 p-4 overflow-y-auto h-80"></div><form id="chat-form" class="p-4 border-t border-gray-200 flex"><input type="text" id="chat-input" placeholder="Ask about traffic..." class="w-full px-3 py-2 border border-gray-300 rounded-l-md" autocomplete="off"><button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-r-md hover:bg-indigo-700">Send</button></form></div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-view" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="relative">
+            <div id="login-page" class="auth-page active"><div class="w-full max-w-md bg-white p-8 rounded-xl shadow-md"><h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Login to Your Account</h2><form id="login-form"><div class="mb-4"><label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label><input type="email" id="login-email" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div><div class="mb-6"><label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="login-password" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700">Login</button></form><p id="login-error" class="text-red-500 text-sm mt-4 text-center"></p><p class="text-center text-sm text-gray-600 mt-4">Don't have an account? <a href="#" id="show-signup" class="font-medium text-indigo-600 hover:text-indigo-500">Sign up</a></p></div></div>
+            <div id="signup-page" class="auth-page"><div class="w-full max-w-md bg-white p-8 rounded-xl shadow-md"><h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Create an Account</h2><form id="signup-form"><div class="mb-4"><label for="signup-email" class="block text-sm font-medium text-gray-700 mb-1">Email Address</label><input type="email" id="signup-email" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div><div class="mb-6"><label for="signup-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="signup-password" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></div><button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700">Create Account</button></form><p id="signup-error" class="text-red-500 text-sm mt-4 text-center"></p><p class="text-center text-sm text-gray-600 mt-4">Already have an account? <a href="#" id="show-login" class="font-medium text-indigo-600 hover:text-indigo-500">Log in</a></p></div></div>
+            <button id="close-auth-modal" class="absolute -top-3 -right-3 bg-white rounded-full p-1 text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+        </div>
+    </div>
+
+    <!-- Daily Commute Alert Modal -->
+    <div id="commute-alert-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"><div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"><div class="mt-3 text-center"><div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100"><svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div><h3 class="text-lg leading-6 font-medium text-gray-900 mt-2">Your Daily Commute Alert!</h3><div class="mt-2 px-7 py-3"><p class="text-sm text-gray-500" id="commute-modal-text">Here's the traffic forecast for your trip to the office.</p></div><div class="items-center px-4 py-3"><button id="close-commute-modal" class="px-4 py-2 bg-indigo-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-indigo-600">Got it, thanks!</button></div></div></div></div>
+
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBlqnaRE1y9cgZN1of3L0gBYE254syCNCs",
+            authDomain: "traffic-prediction-a680c.firebaseapp.com",
+            projectId: "traffic-prediction-a680c",
+            storageBucket: "traffic-prediction-a680c.appspot.com",
+            messagingSenderId: "328312015946",
+            appId: "1:328312015946:web:7b8e01f78accf179de2ab3",
+            measurementId: "G-59R8LR82KP"
+        };
+        const appId = "traffic-prediction-a680c";
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let userId;
+
+        // --- Location Data ---
+        const indianLocations = {
+            "Andaman and Nicobar Islands": ["Port Blair"], "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Tirupati"], "Arunachal Pradesh": ["Itanagar", "Tawang"], "Assam": ["Guwahati", "Dibrugarh", "Silchar"], "Bihar": ["Patna", "Gaya", "Muzaffarpur"], "Chandigarh": ["Chandigarh"], "Chhattisgarh": ["Raipur", "Bhilai", "Bilaspur"], "Dadra and Nagar Haveli and Daman and Diu": ["Daman", "Silvassa"], "Delhi": ["New Delhi", "Noida", "Gurugram", "Faridabad"], "Goa": ["Panaji", "Margao"], "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"], "Haryana": ["Faridabad", "Gurugram", "Panipat"], "Himachal Pradesh": ["Shimla", "Manali"], "Jammu and Kashmir": ["Srinagar", "Jammu"], "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad"], "Karnataka": ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi"], "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode"], "Ladakh": ["Leh", "Kargil"], "Lakshadweep": ["Kavaratti"], "Madhya Pradesh": ["Indore", "Bhopal", "Jabalpur", "Gwalior"], "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Thane"], "Manipur": ["Imphal"], "Meghalaya": ["Shillong"], "Mizoram": ["Aizawl"], "Nagaland": ["Kohima", "Dimapur"], "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela"], "Puducherry": ["Puducherry"], "Punjab": ["Ludhiana", "Amritsar", "Jalandhar"], "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota"], "Sikkim": ["Gangtok"], "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli"], "Telangana": ["Hyderabad", "Warangal", "Nizamabad"], "Tripura": ["Agartala"], "Uttar Pradesh": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Meerut"], "Uttarakhand": ["Dehradun", "Haridwar", "Nainital"], "West Bengal": ["Kolkata", "Asansol", "Siliguri"]
+        };
+
+        function populateLocationDropdowns() {
+            const selects = document.querySelectorAll('.location-select');
+            selects.forEach(select => {
+                select.innerHTML = '';
+                for (const state in indianLocations) {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = state;
+                    indianLocations[state].forEach(city => {
+                        const option = document.createElement('option');
+                        option.value = `${city}, ${state}`;
+                        option.textContent = city;
+                        optgroup.appendChild(option);
+                    });
+                    select.appendChild(optgroup);
+                }
+            });
+        }
+        
+        // --- Auth State Listener ---
+        onAuthStateChanged(auth, user => {
+            const loginSignupBtn = document.getElementById('login-signup-button');
+            const logoutBtn = document.getElementById('logout-button');
+            const welcomeGreeting = document.getElementById('welcome-greeting');
+            const routesGuestPrompt = document.getElementById('routes-guest-prompt');
+
+            if (user) {
+                userId = user.uid;
+                const currentHour = new Date().getHours();
+                let timeOfDayGreeting = "Namaste";
+                if (currentHour < 12) timeOfDayGreeting = "Good Morning";
+                else if (currentHour < 18) timeOfDayGreeting = "Good Afternoon";
+                else timeOfDayGreeting = "Good Evening";
+
+                if (user.isAnonymous) {
+                    welcomeGreeting.textContent = `${timeOfDayGreeting} Guest!`;
+                    loginSignupBtn.classList.remove('hidden');
+                    logoutBtn.classList.add('hidden');
+                    routesGuestPrompt.classList.remove('hidden');
+                } else {
+                    const userName = user.email ? `, ${user.email.split('@')[0]}` : '';
+                    welcomeGreeting.textContent = `${timeOfDayGreeting}${userName}!`;
+                    loginSignupBtn.classList.add('hidden');
+                    logoutBtn.classList.remove('hidden');
+                    routesGuestPrompt.classList.add('hidden');
+                }
+                setupRealtimeListeners(); 
+            } else {
+                signInAnonymously(auth).catch(err => console.error("Anonymous sign-in failed:", err));
+            }
+        });
+
+        // --- Firestore Realtime Listeners ---
+        function setupRealtimeListeners() {
+            if (!userId || (auth.currentUser && auth.currentUser.isAnonymous)) {
+                document.getElementById('saved-routes-list').innerHTML = '<p class="text-gray-500">Login to see your routes.</p>';
+                document.getElementById('commute-alert-status').textContent = '';
+                return;
+            };
+
+            const routesCollection = collection(db, `artifacts/${appId}/users/${userId}/routes`);
+            onSnapshot(routesCollection, (snapshot) => {
+                const routesListEl = document.getElementById('saved-routes-list');
+                const commuteRouteSelect = document.getElementById('commute-route');
+                routesListEl.innerHTML = '';
+                commuteRouteSelect.innerHTML = '<option value="">-- Select a Route --</option>';
+
+                if (snapshot.empty) {
+                    routesListEl.innerHTML = '<p class="text-gray-500">You haven\'t saved any routes yet.</p>';
+                } else {
+                    snapshot.forEach(doc => {
+                        const route = doc.data();
+                        const routeId = doc.id;
+                        const routeEl = document.createElement('div');
+                        routeEl.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-md';
+                        routeEl.innerHTML = `<div><p class="font-semibold">${route.name}</p><p class="text-sm text-gray-500">${route.city}</p></div><button data-id="${routeId}" class="delete-route-btn text-red-500 hover:text-red-700 text-2xl font-bold">&times;</button>`;
+                        routesListEl.appendChild(routeEl);
+                        const optionEl = document.createElement('option');
+                        optionEl.value = routeId;
+                        optionEl.textContent = route.name;
+                        commuteRouteSelect.appendChild(optionEl);
+                    });
+                }
+            });
+            
+            const commuteDocRef = doc(db, `artifacts/${appId}/users/${userId}/settings/commute`);
+            onSnapshot(commuteDocRef, (doc) => {
+                const statusEl = document.getElementById('commute-alert-status');
+                if (doc.exists()) {
+                    const settings = doc.data();
+                    statusEl.textContent = `Alert set for ${settings.routeName} at ${settings.time}.`;
+                } else {
+                    statusEl.textContent = '';
+                }
+            });
+        }
+
+        // --- Event Handlers for New Features ---
+        document.getElementById('save-route-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!userId || (auth.currentUser && auth.currentUser.isAnonymous)) {
+                alert("Please log in to save routes.");
+                return;
+            }
+            const routeName = document.getElementById('route-name').value;
+            const city = document.getElementById('route-city').value;
+            if (!routeName || !city) return;
+            const routesCollection = collection(db, `artifacts/${appId}/users/${userId}/routes`);
+            await addDoc(routesCollection, { name: routeName, city: city });
+            e.target.reset();
+        });
+        
+        document.getElementById('saved-routes-list').addEventListener('click', async (e) => {
+            if (e.target.classList.contains('delete-route-btn')) {
+                const routeId = e.target.dataset.id;
+                if (!routeId || !userId) return;
+                const routeDocRef = doc(db, `artifacts/${appId}/users/${userId}/routes`, routeId);
+                await deleteDoc(routeDocRef);
+            }
+        });
+
+        document.getElementById('commute-alert-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!userId || (auth.currentUser && auth.currentUser.isAnonymous)) {
+                alert("Please log in to set alerts.");
+                return;
+            }
+            const routeSelect = document.getElementById('commute-route');
+            const routeId = routeSelect.value;
+            const time = document.getElementById('commute-time').value;
+            const routeName = routeSelect.options[routeSelect.selectedIndex].text;
+
+            if (!routeId || !time) {
+                alert("Please select a route and a time.");
+                return;
+            }
+            const commuteDocRef = doc(db, `artifacts/${appId}/users/${userId}/settings/commute`);
+            await setDoc(commuteDocRef, { routeId, time, routeName });
+        });
+
+        document.getElementById('best-time-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const city = document.getElementById('best-time-city').value;
+            const arriveBy = document.getElementById('arrive-by-time').value;
+            const resultEl = document.getElementById('prediction-result');
+            resultEl.classList.remove('hidden');
+            resultEl.innerHTML = '<div class="spinner mx-auto my-8"></div>';
+            const prompt = `Based on typical traffic patterns in ${city}, India, if I need to arrive by ${arriveBy}, what is the absolute best time to leave? Also estimate the travel duration. Provide a short, direct answer.`;
+            const bestTimeSuggestion = await callGemini(prompt);
+            resultEl.innerHTML = `<div class="bg-green-50 p-4 rounded-lg text-center"><h3 class="font-bold text-lg text-green-800">Best Time to Leave</h3><p class="text-green-700 mt-2">${bestTimeSuggestion || "Could not calculate."}</p></div>`;
+        });
+
+        // --- Commute Alert Simulation ---
+        setInterval(async () => {
+            if (!userId || (auth.currentUser && auth.currentUser.isAnonymous)) return;
+            const commuteDocRef = doc(db, `artifacts/${appId}/users/${userId}/settings/commute`);
+            const docSnap = await getDoc(commuteDocRef);
+            if (docSnap.exists()) {
+                const settings = docSnap.data();
+                const now = new Date();
+                const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                if (settings.time === currentTime) {
+                    const routeDocRef = doc(db, `artifacts/${appId}/users/${userId}/routes`, settings.routeId);
+                    const routeSnap = await getDoc(routeDocRef);
+                    if(routeSnap.exists()){
+                        const routeData = routeSnap.data();
+                        const prompt = `Give me a quick, one-sentence traffic summary for my commute '${routeData.name}' in ${routeData.city}.`;
+                        const forecast = await callGemini(prompt);
+                        document.getElementById('commute-modal-text').textContent = forecast;
+                        document.getElementById('commute-alert-modal').classList.remove('hidden');
+                    }
+                }
+            }
+        }, 60000);
+
+        document.getElementById('close-commute-modal').addEventListener('click', () => {
+            document.getElementById('commute-alert-modal').classList.add('hidden');
+        });
+
+        // --- Prediction Page Tabs ---
+        document.getElementById('prediction-tabs').addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-button')) {
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                document.querySelectorAll('.prediction-tab-content').forEach(content => content.classList.add('hidden'));
+                document.getElementById(`${e.target.dataset.tab}-tab`).classList.remove('hidden');
+                document.getElementById('prediction-result').classList.add('hidden');
+            }
+        });
+        
+        // --- Auth Modal & Form Listeners ---
+        const authView = document.getElementById('auth-view');
+        document.getElementById('login-signup-button').addEventListener('click', () => authView.classList.remove('hidden'));
+        document.getElementById('login-from-routes').addEventListener('click', () => authView.classList.remove('hidden'));
+        document.getElementById('close-auth-modal').addEventListener('click', () => authView.classList.add('hidden'));
+        document.getElementById('show-signup').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('login-page').classList.remove('active'); document.getElementById('signup-page').classList.add('active'); });
+        document.getElementById('show-login').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('signup-page').classList.remove('active'); document.getElementById('login-page').classList.add('active'); });
+        document.getElementById('signup-form').addEventListener('submit', (e) => { e.preventDefault(); const email = document.getElementById('signup-email').value; const password = document.getElementById('signup-password').value; document.getElementById('signup-error').textContent = ''; createUserWithEmailAndPassword(auth, email, password).then(() => authView.classList.add('hidden')).catch((error) => { document.getElementById('signup-error').textContent = error.message; }); });
+        document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; document.getElementById('login-error').textContent = ''; signInWithEmailAndPassword(auth, email, password).then(() => authView.classList.add('hidden')).catch((error) => { document.getElementById('login-error').textContent = error.message; }); });
+        document.getElementById('logout-button').addEventListener('click', () => { signOut(auth).catch(error => console.error("Logout error:", error)); });
+        
+        // --- Main App Logic (from previous version) ---
+        const navLinks = document.querySelectorAll('.nav-link');
+        const pageContents = document.querySelectorAll('.page-content');
+        const predictionForm = document.getElementById('prediction-form');
+        const predictButton = document.getElementById('predict-button');
+        const predictionResultEl = document.getElementById('prediction-result');
+        const analyzeButton = document.getElementById('analyze-button');
+        const analysisResult = document.getElementById('analysis-result');
+        const analysisText = document.getElementById('analysis-text');
+        const liveClock = document.getElementById('live-clock');
+        const liveDate = document.getElementById('live-date');
+        const planCommuteBtn = document.getElementById('plan-commute-btn');
+        const statUsers = document.getElementById('stat-users');
+        const statPredictions = document.getElementById('stat-predictions');
+        const chatOpenButton = document.getElementById('chat-open-button');
+        const chatCloseButton = document.getElementById('chat-close-button');
+        const chatWindow = document.getElementById('chat-window');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateString = now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            if(liveClock) liveClock.textContent = timeString;
+            if(liveDate) liveDate.textContent = dateString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function updateStats() {
+            if(statUsers && statPredictions) {
+                let users = parseInt(statUsers.textContent.replace(/,/g, ''));
+                let predictions = parseInt(statPredictions.textContent.replace(/,/g, ''));
+                users += Math.floor(Math.random() * 3);
+                predictions += Math.floor(Math.random() * 10) + 1;
+                statUsers.textContent = users.toLocaleString('en-IN');
+                statPredictions.textContent = predictions.toLocaleString('en-IN');
+            }
+        }
+        setInterval(updateStats, 3000);
+
+        planCommuteBtn.addEventListener('click', (e) => { e.preventDefault(); window.location.hash = '#prediction'; });
+        
+        chatOpenButton.addEventListener('click', () => chatWindow.classList.remove('hidden'));
+        chatCloseButton.addEventListener('click', () => chatWindow.classList.add('hidden'));
+
+        function addChatMessage(message, sender = 'bot') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-3 p-3 rounded-lg max-w-xs ${sender === 'user' ? 'bg-indigo-100 text-indigo-900 self-end ml-auto' : 'bg-gray-200 text-gray-800 self-start mr-auto'}`;
+            messageDiv.textContent = message;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        addChatMessage("Hello! How can I help you with your commute today?", "bot");
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return;
+            addChatMessage(userMessage, 'user');
+            chatInput.value = '';
+            const botTypingDiv = document.createElement('div');
+            botTypingDiv.className = 'mb-3 p-3 rounded-lg max-w-xs bg-gray-200 text-gray-500';
+            botTypingDiv.innerHTML = '<div class="flex items-center"><span>Bot is typing</span><div class="spinner ml-2"></div></div>';
+            chatMessages.appendChild(botTypingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            const prompt = `You are a friendly chatbot for a Traffic App. User asked: "${userMessage}". Answer concisely.`;
+            const botResponse = await callGemini(prompt);
+            chatMessages.removeChild(botTypingDiv);
+            addChatMessage(botResponse || "Sorry, I couldn't connect.", "bot");
+        });
+
+        // Global chart data object. This will be updated by file uploads.
+        let chartData = {
+            labels: ['2018', '2019', '2020', '2021', '2022', '2023'],
+            datasets: [{
+                label: 'Traffic Volume',
+                data: [650, 590, 800, 810, 560, 950, 700],
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.4
+            }]
+        };
+
+        function showPage(hash) {
+            const targetId = hash.substring(1) || 'welcome';
+            pageContents.forEach(page => page.classList.remove('active'));
+            navLinks.forEach(link => link.classList.remove('active'));
+            const targetPage = document.getElementById(targetId);
+            const targetLink = document.querySelector(`.nav-link[href="#${targetId}"]`);
+            if (targetPage) targetPage.classList.add('active');
+            if (targetLink) targetLink.classList.add('active');
+            if (targetId === 'dashboard') renderChart();
+        }
+
+        navLinks.forEach(link => { link.addEventListener('click', function (e) { e.preventDefault(); window.location.hash = this.getAttribute('href'); }); });
+        window.addEventListener('hashchange', () => showPage(window.location.hash));
+        showPage(window.location.hash);
+
+        async function callGemini(prompt, isJson = false) {
+            const apiKey = "AIzaSyACAWPedM-l3XuJrW5S5Fginx3nKVZfwL4";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            if (isJson) {
+                payload.generationConfig = {
+                    responseMimeType: "application/json",
+                    responseSchema: { type: "OBJECT", properties: { "level": { "type": "STRING" }, "advisory": { "type": "STRING" }, "hourly_forecast": { "type": "ARRAY", "items": { "type": "NUMBER" } } }, required: ["level", "advisory", "hourly_forecast"] }
+                };
+            }
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0) return result.candidates[0].content.parts[0].text;
+                throw new Error("No content received from API.");
+            } catch (error) { console.error("Gemini API call failed:", error); return null; }
+        }
+        
+        let predictionChartInstance = null;
+        function renderPredictionChart(hourlyData) {
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            if (predictionChartInstance) predictionChartInstance.destroy();
+            predictionChartInstance = new Chart(ctx, { type: 'line', data: { labels: Array.from({length: 24}, (_, i) => `${i}:00`), datasets: [{ label: 'Hourly Traffic Congestion (%)', data: hourlyData, borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } }, plugins: { legend: { display: false } } } });
+        }
+
+        predictionForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const location = document.getElementById('location').value;
+            const date = document.getElementById('date').value;
+            const time = document.getElementById('time').value;
+            const weather = document.getElementById('weather').value;
+            const event = document.getElementById('event').value;
+            predictButton.disabled = true;
+            predictButton.innerHTML = '<div class="spinner"></div><span class="ml-2">Checking...</span>';
+            predictionResultEl.classList.remove('hidden');
+            predictionResultEl.innerHTML = '';
+            
+            let eventInfo = event ? `There is also a special event: ${event}.` : '';
+            let weatherInfo = weather === "I don't know" ? "Assume typical weather." : `The weather is: ${weather}.`;
+            const prompt = `Traffic forecast for ${location}, India, on ${date} at ${time}. ${weatherInfo} ${eventInfo}. Return JSON with level, advisory, and hourly_forecast (24 numbers).`;
+            
+            const resultString = await callGemini(prompt, true);
+            predictButton.disabled = false;
+            predictButton.innerHTML = '<span class="mr-2">🔮</span> Check My Commute';
+
+            if (resultString) {
+                try {
+                    const resultJson = JSON.parse(resultString);
+                    const { level, advisory, hourly_forecast } = resultJson;
+                    const colors = { 'Low': 'text-green-500', 'Medium': 'text-yellow-500', 'High': 'text-orange-500', 'Gridlock': 'text-red-600' };
+                    predictionResultEl.innerHTML = `
+                        <div class="flex-1 bg-gray-50 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-700">Predicted Traffic:</h3>
+                            <p id="traffic-level" class="text-3xl font-bold mb-2 ${colors[level] || 'text-gray-800'}">${level}</p>
+                            <h4 class="text-md font-semibold text-gray-700 mt-4">Commuter Advisory:</h4>
+                            <p id="traffic-advisory" class="text-gray-600 whitespace-pre-wrap">${advisory}</p>
+                        </div>
+                        <div class="mt-6">
+                            <h4 class="text-md font-semibold text-gray-700 mb-2 text-center">Predicted Hourly Traffic Flow</h4>
+                            <div class="h-64"><canvas id="predictionChart"></canvas></div>
+                        </div>`;
+                    renderPredictionChart(hourly_forecast);
+                } catch (e) {
+                    predictionResultEl.innerHTML = `<p class="text-red-500">Sorry, the AI returned an invalid response.</p>`;
+                }
+            } else {
+                predictionResultEl.innerHTML = `<p class="text-red-500">Sorry, the prediction service is unavailable.</p>`;
+            }
+        });
+
+        analyzeButton.addEventListener('click', async function() {
+            analyzeButton.disabled = true;
+            analyzeButton.innerHTML = '<div class="spinner"></div><span class="ml-2">Analyzing...</span>';
+            analysisResult.classList.add('hidden');
+            // Use the current chartData, which might be the default or the uploaded data
+            const dataToAnalyze = JSON.stringify(chartData);
+            const prompt = `Analyze these Indian traffic trends: ${dataToAnalyze}. Give 2-3 bullet points on patterns, anomalies, and reasons.`;
+            const analysis = await callGemini(prompt);
+            analyzeButton.disabled = false;
+            analyzeButton.innerHTML = '<span class="mr-2">✨</span> Analyze Trends with Gemini';
+            if (analysis) {
+                analysisText.textContent = analysis;
+                analysisResult.classList.remove('hidden');
+            } else {
+                analysisText.textContent = "Analysis service unavailable.";
+                analysisResult.classList.remove('hidden');
+            }
+        });
+
+        let trafficChartInstance = null;
+        function renderChart() {
+            const ctx = document.getElementById('trafficChart').getContext('2d');
+            if (trafficChartInstance) trafficChartInstance.destroy();
+            trafficChartInstance = new Chart(ctx, { type: 'line', data: chartData, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false } }, plugins: { legend: { display: false } } } });
+        }
+        
+        // Initial population of dropdowns
+        populateLocationDropdowns();
+
+        // --- FILE UPLOAD LOGIC ---
+        const excelUploadInput = document.getElementById('excel-upload');
+        const fileNameSpan = document.getElementById('file-name');
+        const uploadStatusEl = document.getElementById('upload-status');
+
+        excelUploadInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                fileNameSpan.textContent = `Selected: ${file.name}`;
+                uploadStatusEl.textContent = 'Processing file...';
+
+                // Check file extension to determine the parsing method
+                if (file.name.endsWith('.csv')) {
+                    readCSVFile(file);
+                } else if (file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
+                    readExcelFile(file);
+                } else {
+                    uploadStatusEl.textContent = 'Invalid file type. Please select a .csv, .xls, or .xlsx file.';
+                    fileNameSpan.textContent = 'No file selected';
+                }
+            } else {
+                fileNameSpan.textContent = 'No file selected';
+                uploadStatusEl.textContent = '';
+            }
+        });
+
+    
+        function readExcelFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    processUploadedData(json);
+
+                } catch (error) {
+                    console.error("Error parsing Excel file:", error);
+                    uploadStatusEl.textContent = `Error parsing Excel file. Please ensure it's a valid format.`;
+                }
+            };
+            reader.onerror = function(event) {
+                console.error("FileReader error:", event.target.error);
+                uploadStatusEl.textContent = `Error reading file.`;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function readCSVFile(file) {
+            Papa.parse(file, {
+                complete: function(results) {
+                    processUploadedData(results.data);
+                },
+                header: true,
+                skipEmptyLines: true,
+                error: function(error) {
+                    console.error("Error parsing CSV:", error);
+                    uploadStatusEl.textContent = `Error parsing CSV: ${error.message}`;
+                }
+            });
+        }
+
+        
+        function processUploadedData(parsedData) {
+            if (!parsedData || parsedData.length === 0) {
+                uploadStatusEl.textContent = "The file is empty or could not be read.";
+                return;
+            }
+
+            
+            const labels = parsedData.map(row => row.Year);
+            const data = parsedData.map(row => parseFloat(row.TrafficVolume));
+
+            // Validate the data
+            if (labels.some(label => !label) || data.some(val => isNaN(val))) {
+                uploadStatusEl.textContent = "Data is missing 'Year' or 'TrafficVolume' columns or contains invalid values.";
+                return;
+            }
+
+            
+            chartData.labels = labels;
+            chartData.datasets[0].data = data;
+            
+            showPage('#dashboard'); 
+            renderChart();
+
+            uploadStatusEl.textContent = `File processed successfully! Chart updated with ${parsedData.length} data points.`;
+            console.log("Chart data updated with uploaded file:", chartData);
+        }
+    </script>
+
+    <div class="copyright-badge">
+        © 2025 Road Sarthi
+    </div>
+
+</body>
+</html>
